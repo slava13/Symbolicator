@@ -33,7 +33,8 @@ class DragAndDropView: NSView {
     public func resetReport() {
         self.filePath = nil
         self.layer?.contents = nil
-        self.layer?.backgroundColor = NSColor.lightGray.withAlphaComponent(0.2).cgColor
+        
+        self.layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.2).cgColor
         self.layer?.borderColor = NSColor.gray.cgColor
         self.layer?.cornerRadius = 20
         self.layer?.masksToBounds = true
@@ -45,7 +46,7 @@ class DragAndDropView: NSView {
     }
     
     private func setLayer() {
-        layer?.backgroundColor = NSColor.lightGray.withAlphaComponent(0.2).cgColor
+        layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.2).cgColor
         layer?.borderColor = NSColor.gray.cgColor
     }
     
@@ -111,13 +112,13 @@ class DragAndDropView: NSView {
                 addReportLabel.isHidden = true
                 dropOrSelectLabel.isHidden = true
                 fileNameLabel.isHidden = true
-                layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.1).cgColor
+                layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.5).cgColor
                 return .copy
         } else if checkExtension(sender) {
             imagePreview.isHidden = true
             dropOrSelectLabel.isHidden = true
             fileNameLabel.isHidden = true
-            layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.1).cgColor
+            layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.5).cgColor
             return .copy
         } else {
             return NSDragOperation()

@@ -18,7 +18,6 @@ class ViewController: NSViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        self.view.layer?.backgroundColor = NSColor.white.cgColor
         dropReport.onDragFile = { url in
             self.urlForSample = url
         }
