@@ -42,8 +42,8 @@ class CrashSymbolicate: Processor {
             let file = self.readFile(at: reportUrl)
             let appName = self.findNameOfTheProcess(for: file)
             let bundleID = self.findBundleID(for: file)
-            var loadAddress = self.findLoaddedAddress(for: file, bundleID: bundleID)
-            let uuid = self.findUUID(for: file, bundleID: bundleID)
+            var loadAddress = self.findLoaddedAddress(for: file, appName: appName, bundleID: bundleID)
+            let uuid = self.findUUID(for: file, appName: appName, bundleID: bundleID)
             let functionAddresses = self.findAddressesValues(for: file, appName: appName, bundleID: bundleID)
             let outputOfDwarfdump = self.checkForUUID.checkUUID(launchPath: "/usr/bin/dwarfdump", arguments: ["--uuid", "\(self.stringForAtos)"])
 
@@ -165,11 +165,12 @@ class CrashSymbolicate: Processor {
         return processName
     }
     
-    private func findUUID(for file: [String], bundleID: String ) -> String {
+    private func findUUID(for file: [String], appName: String, bundleID: String) -> String {
         var uuidForCrash = ""
         for line in file {
             let lookForUUID = line.range(of: "[+]\(bundleID)", options:.regularExpression)
-            if lookForUUID != nil {
+            let lookForUUID2 = line.range(of: "[+]\(appName)[ ]", options:.regularExpression)
+            if lookForUUID != nil || lookForUUID2 != nil {
                 let nsString = line as NSString
                 let regex = try! NSRegularExpression(pattern: "<.*>", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
@@ -182,11 +183,12 @@ class CrashSymbolicate: Processor {
         return uuidForCrash
     }
     
-    private func findLoaddedAddress(for file: [String], bundleID: String) -> [String] {
+    private func findLoaddedAddress(for file: [String], appName: String, bundleID: String) -> [String] {
         var pureLoaddedAdress: [String] = []
         for line in file {
             let lookForLoad = line.range(of: "\(bundleID)[ ]", options:.regularExpression)
-            if lookForLoad != nil {
+            let lookForLoad2 = line.range(of: "\(appName)[ ]", options:.regularExpression)
+            if lookForLoad != nil || lookForLoad2 != nil {
                 let nsString = line as NSString
                 let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
@@ -201,7 +203,7 @@ class CrashSymbolicate: Processor {
     private func findAddressesValues(for file: [String], appName: String, bundleID: String) -> [String] {
         var pureAddressesValues: [String] = []
         for lines in file {
-            let lookForAddresses = lines.range(of: "\(appName)[ ][+]", options:.regularExpression)
+            let lookForAddresses = lines.range(of: "\(appName)[ ]", options:.regularExpression)
             let lookForAddresses2 = lines.range(of: "\(bundleID)[ ]", options:.regularExpression)
             if lookForAddresses != nil || lookForAddresses2 != nil {
                 let nsString = lines as NSString
@@ -236,7 +238,7 @@ class CrashSymbolicate: Processor {
         
         for line in mutableText {
             let lookFor = line.range(of: "0x00.*[ ]\(pureLoadAddress)[ ]", options:.regularExpression)
-            let lookFor2 = line.range(of: "0x00.*[ ]\(appName)[ ][+]", options:.regularExpression)
+            let lookFor2 = line.range(of: "0x00.*[ ]\(appName)[ ]", options:.regularExpression)
             if lookFor2 != nil {
                 if let index = mutableText.index(of: line) {
                     mutableText[index] = line.replacingOccurrences(of: "\(appName) +", with: "\(arrayOfOutput[counter])")

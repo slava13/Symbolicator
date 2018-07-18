@@ -72,7 +72,6 @@ class DragAndDropView: NSView {
     
     override func mouseDown(with event: NSEvent) {
         let dialog = NSOpenPanel()
-        
         dialog.title = "Choose a .txt file"
         dialog.showsResizeIndicator = true
         dialog.showsHiddenFiles = false
