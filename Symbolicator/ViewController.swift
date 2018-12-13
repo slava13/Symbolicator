@@ -18,11 +18,11 @@ class ViewController: NSViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        dropReport.onDragFile = { url in
-            self.urlForSample = url
+        dropReport.onDragFiles = { urls in
+            self.urlsForSample = urls
         }
-        dropDSYM.onDragFile = { url in
-            self.urlForDSYM = url
+        dropDSYM.onDragFiles = { urls in
+            self.urlsForDSYM = urls
         }
     }
     
@@ -44,24 +44,24 @@ class ViewController: NSViewController {
         }
     }
 
-    private(set) var urlForSample: URL?
-    private(set) var urlForDSYM: URL?
+    private(set) var urlsForSample: [URL]?
+    private(set) var urlsForDSYM: [URL]?
     private let fileManager = FileManager.default
     
     private lazy var tasks: [Symbolicator] = {
         return [
-            Symbolicator(pathExtension: "txt", processor: Sample()),
+            Symbolicator(pathExtension: "txt", processor: Advanced()),
             Symbolicator(pathExtension: "crash", processor: CrashSymbolicate())
         ]
     }()
     
     private func startSymbolicateProcess(task: Symbolicator) {
         //      let checker = Dwarfdump()
-        guard let nonOptionalSampleU = urlForSample else { return }
-        guard let nonOptionalDsymURL = urlForDSYM else { return }
+        guard let nonOptionalSampleU = urlsForSample else { return }
+        guard let nonOptionalDsymURL = urlsForDSYM else { return }
         
         showSpinner.startAnimation(self)
-        task.processor.process(reportUrl: nonOptionalSampleU, dsymUrl: nonOptionalDsymURL) { (output, error) in
+        task.processor.process(reportUrl: nonOptionalSampleU[0], dsymUrl: nonOptionalDsymURL) { (output, error) in
             if let output = output {
                 self.showSpinner.stopAnimation(self)
                 self.showResult.stringValue = "File saved!"
@@ -85,22 +85,22 @@ class ViewController: NSViewController {
     @IBAction func symbThisFile(_ sender: Any) {
         self.showResult.stringValue = ""
         guard
-            let urlForSample = urlForSample,
-            let _ = urlForDSYM else {
+            let urlForSample = urlsForSample,
+            let _ = urlsForDSYM else {
                 self.showResult.stringValue = "Please add files"
                 self.showResult.sizeToFit()
                 return
             }
         
-        let fileExtension = urlForSample.pathExtension
+        let fileExtension = urlForSample[0].pathExtension
         guard let task = tasks.first(where: { $0.pathExtension == fileExtension })
             else { return }
         startSymbolicateProcess(task: task)
     }
     
     @IBAction func restPaths(_ sender: Any) {
-        urlForSample = nil
-        urlForDSYM = nil
+        urlsForSample = nil
+        urlsForDSYM = nil
         showSpinner.stopAnimation(self)
         showResult.stringValue = ""
         dropDSYM.resetDsym()
