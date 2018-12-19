@@ -106,9 +106,7 @@ class Advanced: Processor {
                     completion(nil, ProcessorError.badInput)
                 }
             }
-            
         }
-
     }
     
     private func readFile(at url: URL) -> [String] {
@@ -244,11 +242,3 @@ class Advanced: Processor {
         return pathToWriteSample
     }
 }
-
-
-//extension Advanced {
-//
-//    func getFile(at url: URL) -> [String] {
-//        return readFile(at: url)
-//    }
-
