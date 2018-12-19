@@ -18,7 +18,6 @@ class Advanced: Processor {
         let addressesValues: [String]
     }
     
-    //    var stringForAtos = ""
     let fileManager = FileManager.default
     let symbQueue = DispatchQueue.global(qos: .userInitiated)
     let checkForUUID = Dwarfdump()
@@ -43,11 +42,12 @@ class Advanced: Processor {
                 let stringForAtos = url.appendingPathComponent(resultSubDir![3]).path.removingPercentEncoding!
                 let bundleID = self.findBundleID(for: file)
                 let assosiatedFrameworks = self.getAssosiatedFrameworks(for: file, with: bundleID)
+                let appName = self.findTheNameOfTheApp(for: file)
                 let filteredAssosiatedFrameworks = assosiatedFrameworks.filter { $0 != "" }
                 var dictLoadAddressesForFramework = [String : String]()
                 var dictOfAddressesValues = [String : [String]]()
                 
-                let addressesAndValues:[(framework: String, loadedAddress:String, valuesAddresses:[String] )] = filteredAssosiatedFrameworks
+                var addressesAndValues:[(framework: String, loadedAddress:String, valuesAddresses:[String] )] = filteredAssosiatedFrameworks
                     .map { framework in
                         return (framework: framework,
                                 loadedAddress: self.findLoaddedAddress(for: file, frameworkName: framework, bundleID: bundleID),
@@ -56,13 +56,20 @@ class Advanced: Processor {
                     }
                     .filter { $0.valuesAddresses.isNotEmpty
                 }
-                
+                //needed to get load address and addresses values for App itself (not only frameworks)
+                let valuesAddressesForApp = self.findAddressesValues(for: file, frameworkName: appName)
+                if valuesAddressesForApp.isNotEmpty {
+                    addressesAndValues.append((framework: appName,
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
+                                               valuesAddresses: self.findAddressesValues(for: file, frameworkName: appName)))
+                }
+              
                 addressesAndValues.forEach {
                     dictLoadAddressesForFramework[$0.framework] = $0.loadedAddress
                     dictOfAddressesValues[$0.framework] = $0.valuesAddresses
                 }
                 
-                let frameworkNames = Array(dictLoadAddressesForFramework.keys.filter { stringForAtos.contains($0)})
+                let frameworkNames = Array(dictLoadAddressesForFramework.keys.filter { stringForAtos.contains($0.appending("."))})
                 for framework in frameworkNames {
                     guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
                     guard let addressesValues = dictOfAddressesValues[framework] else { return }
@@ -162,6 +169,22 @@ class Advanced: Processor {
         for line in file {
             //хорошо что я находу loadAddress фрэймворков, но я забываю что лоададресс нужен и бандлуИД в том числе
             let lookForLoad = line.range(of: "[+]\(bundleID).\(frameworkName).*", options:.regularExpression)
+            if lookForLoad != nil {
+                let nsString = line as NSString
+                let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
+                let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
+                let value = lookRegex.map { nsString.substring(with: $0.range)}
+                let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
+                pureLoaddedAdress.append(noParent.replacingOccurrences(of: "\"", with: ""))
+            }
+        }
+        return pureLoaddedAdress
+    }
+    
+    func findLoaddedAddressForApp(for file: [String], bundleID: String) -> String {
+        var pureLoaddedAdress = ""
+        for line in file {
+            let lookForLoad = line.range(of: "[+]\(bundleID) ", options:.regularExpression)
             if lookForLoad != nil {
                 let nsString = line as NSString
                 let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
