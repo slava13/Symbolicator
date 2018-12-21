@@ -17,113 +17,123 @@ enum ProcessorError: Error {
 
 protocol Processor {
     
-    func process(reportUrl: URL, dsymUrl: URL,  completion: @escaping (ReportOutput?, ProcessorError?) -> Void)
+    func process(reportUrl: URL, dsymUrl: [URL],  completion: @escaping (ReportOutput?, ProcessorError?) -> Void)
 }
 
 class CrashSymbolicate: Processor {
     
     let fileManager = FileManager.default
-    var stringForAtos = ""
+//    var stringForAtos = ""
     let symbQueue = DispatchQueue.global(qos: .userInitiated)
     let checkForUUID = Dwarfdump()
 
-    func process(reportUrl: URL, dsymUrl: URL, completion: @escaping (ReportOutput?, ProcessorError?) -> Void) {
+    func process(reportUrl: URL, dsymUrl: [URL], completion: @escaping (ReportOutput?, ProcessorError?) -> Void) {
         symbQueue.async {
             
-            let resultSubDir = self.fileManager.subpaths(atPath: dsymUrl.path)
-            guard self.fileManager.fileExists(atPath: dsymUrl.appendingPathComponent("/Contents/Resources/DWARF").path) else {
+            let existingDsyms = dsymUrl.filter({ (url) -> Bool in
+                return self.fileManager.fileExists(atPath: url.appendingPathComponent("/Contents/Resources/DWARF").path)
+            })
+            
+            guard existingDsyms.isNotEmpty else {
                 DispatchQueue.main.async {
                     completion(nil, ProcessorError.badInput)
                 }
                 return
             }
-            self.stringForAtos = dsymUrl.appendingPathComponent(resultSubDir![3]).path.removingPercentEncoding!
-            var pureLoadAddress = ""
-            let file = self.readFile(at: reportUrl)
-            let appName = self.findNameOfTheProcess(for: file)
-            let bundleID = self.findBundleID(for: file)
-            var loadAddress = self.findLoaddedAddress(for: file, appName: appName, bundleID: bundleID)
-            let uuid = self.findUUID(for: file, appName: appName, bundleID: bundleID)
-            let functionAddresses = self.findAddressesValues(for: file, appName: appName, bundleID: bundleID)
-            let outputOfDwarfdump = self.checkForUUID.checkUUID(launchPath: "/usr/bin/dwarfdump", arguments: ["--uuid", "\(self.stringForAtos)"])
-
-            // not emp
-            if file.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("File is empty"))
-                }
-                return
-            } else if loadAddress.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("LoadAddress is empty"))
-                }
-                return
-            } else if bundleID.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("BundleID is empty"))
-                }
-                return
-            } else if uuid.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("UUID is empty"))
-                }
-                return
-            } else if  appName.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("ApplicationName is empty"))
-                }
-                return
-            } else if functionAddresses.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("FunctionAddresses are empty"))
-                }
-                return
-            } else if !outputOfDwarfdump.contains("\(uuid)") {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("Please find appropriate dSYM with:\n \(uuid)"))
-                }
-                return
-            }
             
-            var arguments: [String] = {
-                if loadAddress.isEmpty == true {
-                    return [""]
-                } else {
-                    pureLoadAddress = loadAddress.filter({$0 != ""})[0]
-                    var args = ["-o", self.stringForAtos, "-l", pureLoadAddress]
-                    args.append(contentsOf: functionAddresses.filter({$0 != ""}))
-                    return args
-                }
-            }()
+            //need to improve this logic for frameworks, like I did for Sample process
             
-            let output = self.simbolicate(launchPath: "/usr/bin/atos", arguments: arguments)
-            var arrayOfOutput: [String] {
-                var arrayOutput = output.components(separatedBy: "\n")
-                arrayOutput.removeLast()
-                return arrayOutput }
-            
-            if arrayOfOutput.isEmpty {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.empty("Output is empty"))
+            for url in existingDsyms {
+                let resultSubDir = self.fileManager.subpaths(atPath: url.path)
+                let stringForAtos = url.appendingPathComponent(resultSubDir![3]).path.removingPercentEncoding!
+                var pureLoadAddress = ""
+                let file = self.readFile(at: reportUrl)
+                let appName = self.findNameOfTheProcess(for: file)
+                let bundleID = self.findBundleID(for: file)
+                var loadAddress = self.findLoaddedAddress(for: file, appName: appName, bundleID: bundleID)
+                let uuid = self.findUUID(for: file, appName: appName, bundleID: bundleID)
+                let functionAddresses = self.findAddressesValues(for: file, appName: appName, bundleID: bundleID)
+                let outputOfDwarfdump = self.checkForUUID.checkUUID(launchPath: "/usr/bin/dwarfdump", arguments: ["--uuid", "\(stringForAtos)"])
+                
+                // not emp
+                if file.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("File is empty"))
+                    }
+                    return
+                } else if loadAddress.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("LoadAddress is empty"))
+                    }
+                    return
+                } else if bundleID.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("BundleID is empty"))
+                    }
+                    return
+                } else if uuid.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("UUID is empty"))
+                    }
+                    return
+                } else if  appName.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("ApplicationName is empty"))
+                    }
+                    return
+                } else if functionAddresses.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("FunctionAddresses are empty"))
+                    }
+                    return
+                } else if !outputOfDwarfdump.contains("\(uuid)") {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("Please find appropriate dSYM with:\n \(uuid)"))
+                    }
+                    return
                 }
-                return
-            }
-            
-            let match = self.matchOutput(for: file, arrayOfOutput: arrayOfOutput, pureLoadAddress: pureLoadAddress, appName: appName)
-            let finalFulltext = match
-            do {
-                let outputFilePath = try self.writeToFile(at: reportUrl, fulltext: finalFulltext)
-                let result = ReportOutput(output: outputFilePath, uuid: uuid)
-                DispatchQueue.main.async {
-                    completion(result, nil)
+                
+                var arguments: [String] = {
+                    if loadAddress.isEmpty == true {
+                        return [""]
+                    } else {
+                        pureLoadAddress = loadAddress.filter({$0 != ""})[0]
+                        var args = ["-o", stringForAtos, "-l", pureLoadAddress]
+                        args.append(contentsOf: functionAddresses.filter({$0 != ""}))
+                        return args
+                    }
+                }()
+                
+                let output = self.simbolicate(launchPath: "/usr/bin/atos", arguments: arguments)
+                var arrayOfOutput: [String] {
+                    var arrayOutput = output.components(separatedBy: "\n")
+                    arrayOutput.removeLast()
+                    return arrayOutput }
+                
+                if arrayOfOutput.isEmpty {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.empty("Output is empty"))
+                    }
+                    return
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    completion(nil, ProcessorError.badInput)
+                
+                let match = self.matchOutput(for: file, arrayOfOutput: arrayOfOutput, pureLoadAddress: pureLoadAddress, appName: appName)
+                let finalFulltext = match
+                do {
+                    let outputFilePath = try self.writeToFile(at: reportUrl, fulltext: finalFulltext)
+                    let result = ReportOutput(output: outputFilePath)
+                    DispatchQueue.main.async {
+                        completion(result, nil)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        completion(nil, ProcessorError.badInput)
+                    }
                 }
             }
         }
     }
+
     
     
     private(set) var error = ""
@@ -263,4 +273,3 @@ class CrashSymbolicate: Processor {
         return pathToWriteCrash
     }
 }
-

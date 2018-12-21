@@ -11,8 +11,8 @@ import QuickLook
 
 class DragAndDropView: NSView {
     
-    private(set) var filePath: String?
-    var onDragFile: ((URL) -> ())?
+    var filePath: [String]?
+    var onDragFiles: (([URL]) -> ()) = { _ in }
     var dialogTitle = ""
     var expectedExtensions: [String] = []
     
@@ -83,7 +83,7 @@ class DragAndDropView: NSView {
         guard dialog.runModal() == .OK else { return }
         if let fileURL = dialog.url {
             let path = fileURL.path
-            onDragFile?(fileURL)
+            onDragFiles([fileURL])
             setImagePreview(at: path)
             if expectedExtensions.contains("txt") || expectedExtensions.contains("crash") {
                 imagePreview.isHidden = false
@@ -153,27 +153,26 @@ class DragAndDropView: NSView {
             addReportLabel.isHidden = true
             dropOrSelectLabel.isHidden = true
             fileNameLabel.isHidden = false
-            fileNameLabel.stringValue = URL(fileURLWithPath: filePath).lastPathComponent
+            fileNameLabel.stringValue = URL(fileURLWithPath: filePath[0]).lastPathComponent
             fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
-            setImagePreview(at: filePath)
+            setImagePreview(at: filePath[0])
             setLayer()
             return
         }
         addReportLabel.isHidden = true
         fileNameLabel.isHidden = false
-        fileNameLabel.stringValue = URL(fileURLWithPath: filePath).lastPathComponent
+        fileNameLabel.stringValue = URL(fileURLWithPath: filePath[0]).lastPathComponent
         fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
-        setImagePreview(at: filePath)
+        setImagePreview(at: filePath[0])
         setLayer()
     }
     
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let pasteboard = sender.draggingPasteboard().propertyList(forType: NSPasteboard.PasteboardType(rawValue: "NSFilenamesPboardType")) as? NSArray,
-            let path = pasteboard[0] as? String
-            else { return false }
-        filePath = path
-        let url = URL(fileURLWithPath: filePath!)
-        onDragFile?(url)
+        guard let pasteboard = sender.draggingPasteboard().propertyList(forType: NSPasteboard.PasteboardType(rawValue: "NSFilenamesPboardType")) as? NSArray?,
+            let paths = pasteboard else { return  false }
+        filePath = paths as? [String]
+        let urls = (filePath ?? []) .map { URL(fileURLWithPath: $0) }
+        onDragFiles(urls)
         return true
     }
 }
