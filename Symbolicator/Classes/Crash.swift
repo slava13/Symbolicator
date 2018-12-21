@@ -41,9 +41,7 @@ class CrashSymbolicate: Processor {
                 return
             }
             
-            //здесь надо сделать цикл по УУИДу, ибо если массив - чтоб не фейлился на первом, собрать их, посмотреть и искать нужный и матчить
-            //надо подумать как циклично проходить по всем дсимам в поисках нужного и юзать нужны, то есть матчить имя в словаре с дсимом
-            
+            //need to improve this logic for frameworks, like I did for Sample process
             
             for url in existingDsyms {
                 let resultSubDir = self.fileManager.subpaths(atPath: url.path)
@@ -275,4 +273,3 @@ class CrashSymbolicate: Processor {
         return pathToWriteCrash
     }
 }
-

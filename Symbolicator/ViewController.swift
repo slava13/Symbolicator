@@ -50,7 +50,7 @@ class ViewController: NSViewController {
     
     private lazy var tasks: [Symbolicator] = {
         return [
-            Symbolicator(pathExtension: "txt", processor: Advanced()),
+            Symbolicator(pathExtension: "txt", processor: Sample()),
             Symbolicator(pathExtension: "crash", processor: CrashSymbolicate())
         ]
     }()

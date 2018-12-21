@@ -3,13 +3,17 @@
 //  Symbolicator
 //
 //  Created by Yaroslav2 Kopylov2 on 12/1/18.
-//  Copyright © 2018 com.abtester.script. All rights reserved.
+//  Copyright © 2018 com.macpawlabs.symbolicator All rights reserved.
 //
 
 import Foundation
 import Cocoa
 
-class Advanced: Processor {
+struct ReportOutput {
+    var output: String
+}
+
+class Sample: Processor {
     
     private struct Task {
         
@@ -80,7 +84,6 @@ class Advanced: Processor {
             let finalFulltext = file.joined(separator: "\n")
             let finalText: String = tasks
                 .reduce(finalFulltext) { text, task in
-                    
                     var arguments: [String] = {
                         var args = ["-o", task.dsymPath, "-l", task.loadAddress]
                         args.append(contentsOf: task.addressesValues)
@@ -145,7 +148,7 @@ class Advanced: Processor {
         return bundleID
     }
     
-    func getAssosiatedFrameworks(for file: [String], with bundleID: String) -> [String] {
+    private func getAssosiatedFrameworks(for file: [String], with bundleID: String) -> [String] {
         var assosiatedFrameworks = [""]
         for line in file {
             let frameworkBundle = line.range(of: "[+]\(bundleID).*", options:.regularExpression)
@@ -162,10 +165,9 @@ class Advanced: Processor {
         return assosiatedFrameworks
     }
     
-    func findLoaddedAddress(for file: [String], frameworkName: String, bundleID: String) -> String {
+    private func findLoaddedAddress(for file: [String], frameworkName: String, bundleID: String) -> String {
         var pureLoaddedAdress = ""
         for line in file {
-            //хорошо что я находу loadAddress фрэймворков, но я забываю что лоададресс нужен и бандлуИД в том числе
             let lookForLoad = line.range(of: "[+]\(bundleID).\(frameworkName).*", options:.regularExpression)
             if lookForLoad != nil {
                 let nsString = line as NSString
@@ -179,7 +181,7 @@ class Advanced: Processor {
         return pureLoaddedAdress
     }
     
-    func findLoaddedAddressForApp(for file: [String], bundleID: String) -> String {
+    private func findLoaddedAddressForApp(for file: [String], bundleID: String) -> String {
         var pureLoaddedAdress = ""
         for line in file {
             let lookForLoad = line.range(of: "[+]\(bundleID) ", options:.regularExpression)
@@ -195,7 +197,7 @@ class Advanced: Processor {
         return pureLoaddedAdress
     }
     
-    func findAddressesValues(for file: [String], frameworkName: String) -> [String] {
+    private func findAddressesValues(for file: [String], frameworkName: String) -> [String] {
         var pureAddressesValues: [String] = []
         for lines in file {
             let lookForAddresses = lines.range(of: "in \(frameworkName).*", options:.regularExpression)
