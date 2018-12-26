@@ -228,7 +228,7 @@ class Sample: Processor {
         return output
     }
     
-    private func matchOutput(in text :String, replacements: Zip2Sequence<[String], [String]>) -> String {
+    private func matchOutput(in text: String, replacements: Zip2Sequence<[String], [String]>) -> String {
         var fulltext = text
         for (key, value) in replacements {
             fulltext = fulltext.replacingOccurrences(of: "\(key)", with: "\(value)")

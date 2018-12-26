@@ -22,14 +22,22 @@ protocol Processor {
 
 class CrashSymbolicate: Processor {
     
+    private struct Task {
+        
+        let dsymPath: String
+        let loadAddress: String
+        let addressesValues: [String]
+    }
+    
     let fileManager = FileManager.default
-//    var stringForAtos = ""
     let symbQueue = DispatchQueue.global(qos: .userInitiated)
     let checkForUUID = Dwarfdump()
 
     func process(reportUrl: URL, dsymUrl: [URL], completion: @escaping (ReportOutput?, ProcessorError?) -> Void) {
+        let file = self.readFile(at: reportUrl)
+        let appName = self.findNameOfTheProcess(for: file)
         symbQueue.async {
-            
+            var tasks: [Task] = []
             let existingDsyms = dsymUrl.filter({ (url) -> Bool in
                 return self.fileManager.fileExists(atPath: url.appendingPathComponent("/Contents/Resources/DWARF").path)
             })
@@ -46,96 +54,93 @@ class CrashSymbolicate: Processor {
             for url in existingDsyms {
                 let resultSubDir = self.fileManager.subpaths(atPath: url.path)
                 let stringForAtos = url.appendingPathComponent(resultSubDir![3]).path.removingPercentEncoding!
-                var pureLoadAddress = ""
-                let file = self.readFile(at: reportUrl)
-                let appName = self.findNameOfTheProcess(for: file)
                 let bundleID = self.findBundleID(for: file)
-                var loadAddress = self.findLoaddedAddress(for: file, appName: appName, bundleID: bundleID)
-                let uuid = self.findUUID(for: file, appName: appName, bundleID: bundleID)
-                let functionAddresses = self.findAddressesValues(for: file, appName: appName, bundleID: bundleID)
-                let outputOfDwarfdump = self.checkForUUID.checkUUID(launchPath: "/usr/bin/dwarfdump", arguments: ["--uuid", "\(stringForAtos)"])
+                let assosiatedFrameworks = self.getAssosiatedFrameworks(for: file, with: bundleID)
+                let filteredAssosiatedFrameworks = assosiatedFrameworks.filter { $0 != "" && $0 != "[]" }
+                var dictLoadAddressesForFramework = [String : String]()
+                var dictOfAddressesValues = [String : [String]]()
                 
-                // not emp
-                if file.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("File is empty"))
+                var addressesAndValues:[(framework: String, loadedAddress:String, valuesAddresses:[String] )] = filteredAssosiatedFrameworks
+                    .map { framework in
+                        return (framework: framework,
+                                loadedAddress: self.findLoaddedAddress(for: file, frameworkName: framework, bundleID: bundleID),
+                                valuesAddresses: self.findAddressesValues(for: file, frameworkName: framework).filter { !$0.isEmpty }
+                        )
                     }
-                    return
-                } else if loadAddress.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("LoadAddress is empty"))
-                    }
-                    return
-                } else if bundleID.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("BundleID is empty"))
-                    }
-                    return
-                } else if uuid.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("UUID is empty"))
-                    }
-                    return
-                } else if  appName.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("ApplicationName is empty"))
-                    }
-                    return
-                } else if functionAddresses.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("FunctionAddresses are empty"))
-                    }
-                    return
-                } else if !outputOfDwarfdump.contains("\(uuid)") {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("Please find appropriate dSYM with:\n \(uuid)"))
-                    }
-                    return
+                    .filter { $0.valuesAddresses.isNotEmpty && !$0.loadedAddress.isEmpty
                 }
                 
-                var arguments: [String] = {
-                    if loadAddress.isEmpty == true {
-                        return [""]
-                    } else {
-                        pureLoadAddress = loadAddress.filter({$0 != ""})[0]
-                        var args = ["-o", stringForAtos, "-l", pureLoadAddress]
-                        args.append(contentsOf: functionAddresses.filter({$0 != ""}))
+                //needed to get load address and addresses values for App itself (not only frameworks)
+                let valuesAddressesForApp = self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID).filter { !$0.isEmpty }
+                if valuesAddressesForApp.isNotEmpty {
+                    addressesAndValues.append((framework: appName,
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
+                                               valuesAddresses: self.findAddressesValues(for: file, frameworkName: appName)))
+                    addressesAndValues.append((framework: bundleID,
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
+                                               valuesAddresses: self.findAddressesValues(for: file, frameworkName: bundleID)))
+                }
+                
+                addressesAndValues.forEach {
+                    dictLoadAddressesForFramework[$0.framework] = $0.loadedAddress
+                    dictOfAddressesValues[$0.framework] = $0.valuesAddresses
+                }
+                
+                dictOfAddressesValues.forEach { (key, values) in
+                    dictOfAddressesValues[key] = values.filter { $0 != "" }
+                }
+                
+                let frameworkNames = Array(dictLoadAddressesForFramework.keys.filter { stringForAtos.contains($0.appending("."))})
+                for framework in frameworkNames {
+                    let filteredDict = dictOfAddressesValues.filter { $0.value.isNotEmpty }
+                    if framework == appName && !filteredDict.keys.contains(framework) {
+                        guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
+                        if loadAddress.count <= 11 { //hotfix for cases where one framework appears multiple times
+                            guard let addressesValues = filteredDict[bundleID] else { return }
+                            tasks.append(Task(dsymPath: stringForAtos, loadAddress: loadAddress, addressesValues: addressesValues))
+                        }
+                        break
+                    }
+                    guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
+                    if loadAddress.count <= 11 { //hotfix for cases where one framework appears multiple times
+                        guard let addressesValues = filteredDict[framework] else { return }
+                        tasks.append(Task(dsymPath: stringForAtos, loadAddress: loadAddress, addressesValues: addressesValues))
+                    }
+                }
+            }
+            
+            let finalFulltext = file.joined(separator: "\n")
+            let finalText: String = tasks
+                .reduce(finalFulltext) { text, task in
+                    var arguments: [String] = {
+                        var args = ["-o", task.dsymPath, "-l", task.loadAddress]
+                        args.append(contentsOf: task.addressesValues)
                         return args
+                    }()
+                    let output = self.simbolicate(launchPath: "/usr/bin/atos", arguments: arguments)
+                    var arrayOfOutput: [String] {
+                        var arrayOutput = output.components(separatedBy: "\n")
+                        arrayOutput.removeLast()
+                        return arrayOutput
                     }
-                }()
-                
-                let output = self.simbolicate(launchPath: "/usr/bin/atos", arguments: arguments)
-                var arrayOfOutput: [String] {
-                    var arrayOutput = output.components(separatedBy: "\n")
-                    arrayOutput.removeLast()
-                    return arrayOutput }
-                
-                if arrayOfOutput.isEmpty {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.empty("Output is empty"))
-                    }
-                    return
+                    let zipped = zip(task.addressesValues, arrayOfOutput)
+                    print(zipped)
+                    return self.matchOutput(in: text, replacements: zipped)
+            }
+            do {
+                let outputFilePath = try self.writeToFile(at: reportUrl, fulltext: finalText)
+                let result = ReportOutput(output: outputFilePath)
+                DispatchQueue.main.async {
+                    completion(result, nil)
                 }
-                
-                let match = self.matchOutput(for: file, arrayOfOutput: arrayOfOutput, pureLoadAddress: pureLoadAddress, appName: appName)
-                let finalFulltext = match
-                do {
-                    let outputFilePath = try self.writeToFile(at: reportUrl, fulltext: finalFulltext)
-                    let result = ReportOutput(output: outputFilePath)
-                    DispatchQueue.main.async {
-                        completion(result, nil)
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        completion(nil, ProcessorError.badInput)
-                    }
+            } catch {
+                DispatchQueue.main.async {
+                    completion(nil, ProcessorError.badInput)
                 }
             }
         }
     }
 
-    
-    
     private(set) var error = ""
     
     private func readFile(at url: URL) -> [String] {
@@ -193,12 +198,30 @@ class CrashSymbolicate: Processor {
         return uuidForCrash
     }
     
-    private func findLoaddedAddress(for file: [String], appName: String, bundleID: String) -> [String] {
-        var pureLoaddedAdress: [String] = []
+    private func getAssosiatedFrameworks(for file: [String], with bundleID: String) -> [String] {
+        var assosiatedFrameworks = [""]
+        var mutableBundleID = bundleID
+        mutableBundleID.append(".")
         for line in file {
-            let lookForLoad = line.range(of: "\(bundleID)[ ]", options:.regularExpression)
-            let lookForLoad2 = line.range(of: "\(appName)[ ]", options:.regularExpression)
-            if lookForLoad != nil || lookForLoad2 != nil {
+            let frameworkBundle = line.range(of: "[ ]\(mutableBundleID).*", options:.regularExpression)
+            if frameworkBundle != nil {
+                let nsString = line as NSString
+                let regex = try! NSRegularExpression(pattern: "\(mutableBundleID).*[(]", options: [])
+                let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
+                let value = lookRegex.map { nsString.substring(with: $0.range)}
+                let noParent = String(describing: value).replacingOccurrences(of: "(\"]", with: "").trimmingCharacters(in: .whitespaces)
+                let frameworkNameWithBundleID = String(noParent).replacingOccurrences(of: "[\"", with: "")
+                assosiatedFrameworks.append(frameworkNameWithBundleID.replacingOccurrences(of: "\(mutableBundleID)", with: ""))
+            }
+        }
+        return assosiatedFrameworks
+    }
+    
+    private func findLoaddedAddress(for file: [String], frameworkName: String, bundleID: String) -> String {
+        var pureLoaddedAdress = ""
+        for line in file {
+            let lookForLoad = line.range(of: "\(bundleID).\(frameworkName).*", options:.regularExpression)
+            if lookForLoad != nil {
                 let nsString = line as NSString
                 let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
@@ -210,10 +233,42 @@ class CrashSymbolicate: Processor {
         return pureLoaddedAdress
     }
     
-    private func findAddressesValues(for file: [String], appName: String, bundleID: String) -> [String] {
+    private func findLoaddedAddressForApp(for file: [String], bundleID: String) -> String {
+        var pureLoaddedAdress = ""
+        for line in file {
+            let lookForLoad = line.range(of: "[+]\(bundleID) ", options:.regularExpression)
+            if lookForLoad != nil {
+                let nsString = line as NSString
+                let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
+                let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
+                let value = lookRegex.map { nsString.substring(with: $0.range)}
+                let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
+                pureLoaddedAdress.append(noParent.replacingOccurrences(of: "\"", with: ""))
+            }
+        }
+        return pureLoaddedAdress
+    }
+    
+    private func findAddressesValues(for file: [String], frameworkName: String) -> [String] {
         var pureAddressesValues: [String] = []
         for lines in file {
-            let lookForAddresses = lines.range(of: "\(appName)[ ]", options:.regularExpression)
+            let lookForAddresses = lines.range(of: "\(frameworkName)[ ]", options:.regularExpression)
+            if lookForAddresses != nil {
+                let nsString = lines as NSString
+                let regex = try! NSRegularExpression(pattern: "0x00.*", options: [])
+                let lookRegex = regex.matches(in: lines, options: [], range: NSMakeRange(0, nsString.length))
+                let value = lookRegex.map { nsString.substring(with: $0.range)}
+                let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(19)
+                pureAddressesValues.append(noParent.replacingOccurrences(of: "\"", with: ""))
+            }
+        }
+        return pureAddressesValues
+    }
+    
+    private func findAddressesValuesForApp(for file: [String], frameworkName: String, bundleID: String) -> [String] {
+        var pureAddressesValues: [String] = []
+        for lines in file {
+            let lookForAddresses = lines.range(of: "\(frameworkName)[ ]", options:.regularExpression)
             let lookForAddresses2 = lines.range(of: "\(bundleID)[ ]", options:.regularExpression)
             if lookForAddresses != nil || lookForAddresses2 != nil {
                 let nsString = lines as NSString
@@ -242,28 +297,36 @@ class CrashSymbolicate: Processor {
         return output
     }
     
-    private func matchOutput(for file: [String], arrayOfOutput: [String], pureLoadAddress: String, appName: String) -> String {
-        var counter = 0
-        var mutableText: [String] = file
-        
-        for line in mutableText {
-            let lookFor = line.range(of: "0x00.*[ ]\(pureLoadAddress)[ ]", options:.regularExpression)
-            let lookFor2 = line.range(of: "0x00.*[ ]\(appName)[ ]", options:.regularExpression)
-            if lookFor2 != nil {
-                if let index = mutableText.index(of: line) {
-                    mutableText[index] = line.replacingOccurrences(of: "\(appName) +", with: "\(arrayOfOutput[counter])")
-                }
-                counter += 1
-            } else if lookFor != nil {
-                    if let index = mutableText.index(of: line) {
-                        mutableText[index] = line.replacingOccurrences(of: "\(pureLoadAddress)", with: "\(arrayOfOutput[counter])")
-                }
-                counter += 1
-            }
+    private func matchOutput(in text: String, replacements: Zip2Sequence<[String], [String]>) -> String {
+        var fulltext = text
+        for (key, value) in replacements {
+            fulltext = fulltext.replacingOccurrences(of: "\(key)", with: "\(value)")
         }
-        let fulltext: String = mutableText.joined(separator: "\n")
         return fulltext
     }
+    
+//    private func matchOutput(in text: String, arrayOfOutput: [String], pureLoadAddress: String, appName: String) -> String {
+//        var counter = 0
+//        var mutableText = text
+//
+//        for line in mutableText {
+//            let lookFor = line.range(of: "0x00.*[ ]\(pureLoadAddress)[ ]", options:.regularExpression)
+//            let lookFor2 = line.range(of: "0x00.*[ ]\(appName)[ ]", options:.regularExpression)
+//            if lookFor2 != nil {
+//                if let index = mutableText.index(of: line) {
+//                    mutableText[index] = line.replacingOccurrences(of: "\(appName) +", with: "\(arrayOfOutput[counter])")
+//                }
+//                counter += 1
+//            } else if lookFor != nil {
+//                    if let index = mutableText.index(of: line) {
+//                        mutableText[index] = line.replacingOccurrences(of: "\(pureLoadAddress)", with: "\(arrayOfOutput[counter])")
+//                }
+//                counter += 1
+//            }
+//        }
+//        let fulltext: String = mutableText.joined(separator: "\n")
+//        return fulltext
+//    }
     
     private func writeToFile(at url: URL, fulltext: String) throws -> String {
         let fileToSave = "\(url.deletingPathExtension().lastPathComponent)_Symbolicated-File.txt"
