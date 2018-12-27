@@ -32,7 +32,7 @@ class CrashSymbolicate: Processor {
     let fileManager = FileManager.default
     let symbQueue = DispatchQueue.global(qos: .userInitiated)
     let checkForUUID = Dwarfdump()
-
+    
     func process(reportUrl: URL, dsymUrl: [URL], completion: @escaping (ReportOutput?, ProcessorError?) -> Void) {
         let file = self.readFile(at: reportUrl)
         let appName = self.findNameOfTheProcess(for: file)
@@ -95,17 +95,17 @@ class CrashSymbolicate: Processor {
                     let filteredDict = dictOfAddressesValues.filter { $0.value.isNotEmpty }
                     if framework == appName && !filteredDict.keys.contains(framework) {
                         guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
-                        if loadAddress.count <= 11 { //hotfix for cases where one framework appears multiple times
-                            guard let addressesValues = filteredDict[bundleID] else { return }
-                            tasks.append(Task(dsymPath: stringForAtos, loadAddress: loadAddress, addressesValues: addressesValues))
-                        }
-                        break
-                    }
-                    guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
-                    if loadAddress.count <= 11 { //hotfix for cases where one framework appears multiple times
-                        guard let addressesValues = filteredDict[framework] else { return }
+                        guard let addressesValues = filteredDict[bundleID] else { return }
+                        tasks.append(Task(dsymPath: stringForAtos, loadAddress: loadAddress, addressesValues: addressesValues))
+                        break // so it wouldn't add anything extra except needed addresses for bundleID only
+                    } else if framework == appName && filteredDict.keys.contains(framework) {
+                        guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
+                        guard let addressesValues = filteredDict[bundleID] else { return }
                         tasks.append(Task(dsymPath: stringForAtos, loadAddress: loadAddress, addressesValues: addressesValues))
                     }
+                    guard let loadAddress = dictLoadAddressesForFramework[framework] else { return }
+                    guard let addressesValues = filteredDict[framework] else { return }
+                    tasks.append(Task(dsymPath: stringForAtos, loadAddress: loadAddress, addressesValues: addressesValues))
                 }
             }
             
@@ -140,7 +140,7 @@ class CrashSymbolicate: Processor {
             }
         }
     }
-
+    
     private(set) var error = ""
     
     private func readFile(at url: URL) -> [String] {
@@ -203,10 +203,10 @@ class CrashSymbolicate: Processor {
         var mutableBundleID = bundleID
         mutableBundleID.append(".")
         for line in file {
-            let frameworkBundle = line.range(of: "[ ]\(mutableBundleID).*", options:.regularExpression)
+            let frameworkBundle = line.range(of: "\(bundleID).*", options:.regularExpression)
             if frameworkBundle != nil {
                 let nsString = line as NSString
-                let regex = try! NSRegularExpression(pattern: "\(mutableBundleID).*[(]", options: [])
+                let regex = try! NSRegularExpression(pattern: "\(bundleID).*[(]", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
                 let value = lookRegex.map { nsString.substring(with: $0.range)}
                 let noParent = String(describing: value).replacingOccurrences(of: "(\"]", with: "").trimmingCharacters(in: .whitespaces)
@@ -220,17 +220,18 @@ class CrashSymbolicate: Processor {
     private func findLoaddedAddress(for file: [String], frameworkName: String, bundleID: String) -> String {
         var pureLoaddedAdress = ""
         for line in file {
+            //sometimes frameowkrs don't have [+] before the name...
             let lookForLoad = line.range(of: "\(bundleID).\(frameworkName).*", options:.regularExpression)
             if lookForLoad != nil {
                 let nsString = line as NSString
-                let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
+                let regex = try! NSRegularExpression(pattern: "0x1.*", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
                 let value = lookRegex.map { nsString.substring(with: $0.range)}
                 let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
                 pureLoaddedAdress.append(noParent.replacingOccurrences(of: "\"", with: ""))
             }
         }
-        return pureLoaddedAdress
+        return String(pureLoaddedAdress.suffix(11))
     }
     
     private func findLoaddedAddressForApp(for file: [String], bundleID: String) -> String {
@@ -239,7 +240,7 @@ class CrashSymbolicate: Processor {
             let lookForLoad = line.range(of: "[+]\(bundleID) ", options:.regularExpression)
             if lookForLoad != nil {
                 let nsString = line as NSString
-                let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
+                let regex = try! NSRegularExpression(pattern: "0x1.*", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
                 let value = lookRegex.map { nsString.substring(with: $0.range)}
                 let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
@@ -252,7 +253,7 @@ class CrashSymbolicate: Processor {
     private func findAddressesValues(for file: [String], frameworkName: String) -> [String] {
         var pureAddressesValues: [String] = []
         for lines in file {
-            let lookForAddresses = lines.range(of: "\(frameworkName)[ ]", options:.regularExpression)
+            let lookForAddresses = lines.range(of: ".\(frameworkName)", options:.regularExpression)
             if lookForAddresses != nil {
                 let nsString = lines as NSString
                 let regex = try! NSRegularExpression(pattern: "0x00.*", options: [])
@@ -304,29 +305,6 @@ class CrashSymbolicate: Processor {
         }
         return fulltext
     }
-    
-//    private func matchOutput(in text: String, arrayOfOutput: [String], pureLoadAddress: String, appName: String) -> String {
-//        var counter = 0
-//        var mutableText = text
-//
-//        for line in mutableText {
-//            let lookFor = line.range(of: "0x00.*[ ]\(pureLoadAddress)[ ]", options:.regularExpression)
-//            let lookFor2 = line.range(of: "0x00.*[ ]\(appName)[ ]", options:.regularExpression)
-//            if lookFor2 != nil {
-//                if let index = mutableText.index(of: line) {
-//                    mutableText[index] = line.replacingOccurrences(of: "\(appName) +", with: "\(arrayOfOutput[counter])")
-//                }
-//                counter += 1
-//            } else if lookFor != nil {
-//                    if let index = mutableText.index(of: line) {
-//                        mutableText[index] = line.replacingOccurrences(of: "\(pureLoadAddress)", with: "\(arrayOfOutput[counter])")
-//                }
-//                counter += 1
-//            }
-//        }
-//        let fulltext: String = mutableText.joined(separator: "\n")
-//        return fulltext
-//    }
     
     private func writeToFile(at url: URL, fulltext: String) throws -> String {
         let fileToSave = "\(url.deletingPathExtension().lastPathComponent)_Symbolicated-File.txt"
