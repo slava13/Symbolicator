@@ -28,6 +28,10 @@ class Sample: Processor {
     
     func process(reportUrl: URL, dsymUrl: [URL], completion: @escaping (ReportOutput?, ProcessorError?) -> Void) {
         let file = self.readFile(at: reportUrl)
+        let bundleID = self.findBundleID(for: file)
+        let assosiatedFrameworks = self.getAssosiatedFrameworks(for: file, with: bundleID)
+        let appName = self.findTheNameOfTheApp(for: file)
+        let filteredAssosiatedFrameworks = assosiatedFrameworks.filter { $0 != "" }
         symbQueue.async {
             var tasks: [Task] = []
             let existingDsyms = dsymUrl.filter({ (url) -> Bool in
@@ -44,10 +48,6 @@ class Sample: Processor {
             for url in dsymUrl {
                 let resultSubDir = self.fileManager.subpaths(atPath: url.path)
                 let stringForAtos = url.appendingPathComponent(resultSubDir![3]).path.removingPercentEncoding!
-                let bundleID = self.findBundleID(for: file)
-                let assosiatedFrameworks = self.getAssosiatedFrameworks(for: file, with: bundleID)
-                let appName = self.findTheNameOfTheApp(for: file)
-                let filteredAssosiatedFrameworks = assosiatedFrameworks.filter { $0 != "" }
                 var dictLoadAddressesForFramework = [String : String]()
                 var dictOfAddressesValues = [String : [String]]()
                 
@@ -228,7 +228,7 @@ class Sample: Processor {
         return output
     }
     
-    private func matchOutput(in text :String, replacements: Zip2Sequence<[String], [String]>) -> String {
+    private func matchOutput(in text: String, replacements: Zip2Sequence<[String], [String]>) -> String {
         var fulltext = text
         for (key, value) in replacements {
             fulltext = fulltext.replacingOccurrences(of: "\(key)", with: "\(value)")
