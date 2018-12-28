@@ -36,6 +36,9 @@ class CrashSymbolicate: Processor {
     func process(reportUrl: URL, dsymUrl: [URL], completion: @escaping (ReportOutput?, ProcessorError?) -> Void) {
         let file = self.readFile(at: reportUrl)
         let appName = self.findNameOfTheProcess(for: file)
+        let bundleID = self.findBundleID(for: file)
+        let assosiatedFrameworks = self.getAssosiatedFrameworks(for: file, with: bundleID)
+        let filteredAssosiatedFrameworks = assosiatedFrameworks.filter { $0 != "" && $0 != "[]" }
         symbQueue.async {
             var tasks: [Task] = []
             let existingDsyms = dsymUrl.filter({ (url) -> Bool in
@@ -48,15 +51,10 @@ class CrashSymbolicate: Processor {
                 }
                 return
             }
-            
-            //need to improve this logic for frameworks, like I did for Sample process
-            
+                        
             for url in existingDsyms {
                 let resultSubDir = self.fileManager.subpaths(atPath: url.path)
                 let stringForAtos = url.appendingPathComponent(resultSubDir![3]).path.removingPercentEncoding!
-                let bundleID = self.findBundleID(for: file)
-                let assosiatedFrameworks = self.getAssosiatedFrameworks(for: file, with: bundleID)
-                let filteredAssosiatedFrameworks = assosiatedFrameworks.filter { $0 != "" && $0 != "[]" }
                 var dictLoadAddressesForFramework = [String : String]()
                 var dictOfAddressesValues = [String : [String]]()
                 
