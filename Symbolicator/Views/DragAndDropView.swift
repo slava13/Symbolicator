@@ -16,6 +16,18 @@ class DragAndDropView: NSView {
     var dialogTitle = ""
     var expectedExtensions: [String] = []
     
+    @objc public dynamic var isEnabled: Bool = true {
+        didSet {
+            alphaValue = isEnabled ? 1.0 : 0.5
+        }
+    }
+    
+    public var isPressed = false {
+        didSet {
+            alphaValue = isPressed ? 0.5 : 1.0
+        }
+    }
+    
     @IBOutlet weak var imagePreview: NSImageView!
     @IBOutlet weak var addReportLabel: NSTextField!
     @IBOutlet weak var dropOrSelectLabel: NSTextField!
@@ -71,6 +83,8 @@ class DragAndDropView: NSView {
     }
     
     override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        isPressed = true
         let dialog = NSOpenPanel()
         dialog.title = "Choose a .txt file"
         dialog.showsResizeIndicator = true
@@ -80,7 +94,10 @@ class DragAndDropView: NSView {
         dialog.allowsMultipleSelection = false
         dialog.allowedFileTypes = expectedExtensions
         
-        guard dialog.runModal() == .OK else { return }
+        guard dialog.runModal() == .OK else {
+            isPressed = false
+            return
+        }
         if let fileURL = dialog.url {
             let path = fileURL.path
             onDragFiles([fileURL])
@@ -92,6 +109,7 @@ class DragAndDropView: NSView {
                 fileNameLabel.isHidden = false
                 fileNameLabel.stringValue = URL(fileURLWithPath: path).lastPathComponent
                 fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
+                isPressed = false
                 return
             }
             imagePreview.isHidden = false
@@ -100,6 +118,7 @@ class DragAndDropView: NSView {
             fileNameLabel.isHidden = false
             fileNameLabel.stringValue = URL(fileURLWithPath: path).lastPathComponent
             fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
+            isPressed = false
         }
     }
     
