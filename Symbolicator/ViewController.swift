@@ -69,14 +69,7 @@ class ViewController: NSViewController {
                 NSWorkspace.shared.openFile(output.output)
             } else if let error = error {
                 self.showSpinner.stopAnimation(self)
-                let nsAlert = NSAlert()
-                nsAlert.informativeText = error.text
-                nsAlert.addButton(withTitle: "Got it!")
-                nsAlert.beginSheetModal(for: self.view.window!, completionHandler: { (modalResponse) -> Void in
-                    if modalResponse == NSApplication.ModalResponse.alertFirstButtonReturn {
-                        return
-                    }
-                })
+                self.showAlert(text: error.text, button: "Got it!")
             }
             self.showSpinner.stopAnimation(self)
         }
@@ -87,8 +80,7 @@ class ViewController: NSViewController {
         guard
             let urlForSample = urlsForSample,
             let _ = urlsForDSYM else {
-                self.showResult.stringValue = "Please add files"
-                self.showResult.sizeToFit()
+                showAlert(text: "Please add files", button: "Ok")
                 return
             }
         
@@ -109,6 +101,7 @@ class ViewController: NSViewController {
 }
 
 private extension ProcessorError {
+    
     var text: String {
         switch self {
         case .empty(let text):
@@ -118,5 +111,19 @@ private extension ProcessorError {
         default:
             return "Something went wrong"
         }
+    }
+}
+
+private extension ViewController {
+    
+    func showAlert(text: String, button title: String) {
+        let nsAlert = NSAlert()
+        nsAlert.informativeText = text
+        nsAlert.addButton(withTitle: title)
+        nsAlert.beginSheetModal(for: self.view.window!, completionHandler: { (modalResponse) -> Void in
+            if modalResponse == NSApplication.ModalResponse.alertFirstButtonReturn {
+                return
+            }
+        })
     }
 }
