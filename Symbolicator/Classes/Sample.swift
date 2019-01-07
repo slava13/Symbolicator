@@ -171,7 +171,7 @@ class Sample: Processor {
             let lookForLoad = line.range(of: "[+]\(bundleID).\(frameworkName).*", options:.regularExpression)
             if lookForLoad != nil {
                 let nsString = line as NSString
-                let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
+                let regex = try! NSRegularExpression(pattern: "0x1.*", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
                 let value = lookRegex.map { nsString.substring(with: $0.range)}
                 let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
@@ -187,7 +187,7 @@ class Sample: Processor {
             let lookForLoad = line.range(of: "[+]\(bundleID) ", options:.regularExpression)
             if lookForLoad != nil {
                 let nsString = line as NSString
-                let regex = try! NSRegularExpression(pattern: "0x10.*", options: [])
+                let regex = try! NSRegularExpression(pattern: "0x1.*", options: [])
                 let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
                 let value = lookRegex.map { nsString.substring(with: $0.range)}
                 let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
