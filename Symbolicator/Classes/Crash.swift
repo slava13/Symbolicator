@@ -73,10 +73,10 @@ class CrashSymbolicate: Processor {
                 if valuesAddressesForApp.isNotEmpty {
                     addressesAndValues.append((framework: appName,
                                                loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
-                                               valuesAddresses: self.findAddressesValues(for: file, frameworkName: appName)))
+                                               valuesAddresses: self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID)))
                     addressesAndValues.append((framework: bundleID,
                                                loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
-                                               valuesAddresses: self.findAddressesValues(for: file, frameworkName: bundleID)))
+                                               valuesAddresses: self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID)))
                 }
                 
                 addressesAndValues.forEach {
@@ -251,7 +251,7 @@ class CrashSymbolicate: Processor {
     private func findAddressesValues(for file: [String], frameworkName: String) -> [String] {
         var pureAddressesValues: [String] = []
         for lines in file {
-            let lookForAddresses = lines.range(of: ".\(frameworkName)", options:.regularExpression)
+            let lookForAddresses = lines.range(of: "[.]\(frameworkName)", options:.regularExpression)
             if lookForAddresses != nil {
                 let nsString = lines as NSString
                 let regex = try! NSRegularExpression(pattern: "0x00.*", options: [])
