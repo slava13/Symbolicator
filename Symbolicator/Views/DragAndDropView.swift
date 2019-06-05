@@ -108,7 +108,7 @@ class DragAndDropView: NSView {
                 dropOrSelectLabel.isHidden = true
                 fileNameLabel.isHidden = false
                 fileNameLabel.stringValue = URL(fileURLWithPath: path).lastPathComponent
-                fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
+                fileNameLabel.lineBreakMode = NSLineBreakMode(rawValue: 4)!
                 isPressed = false
                 return
             }
@@ -117,7 +117,7 @@ class DragAndDropView: NSView {
             dropOrSelectLabel.isHidden = true
             fileNameLabel.isHidden = false
             fileNameLabel.stringValue = URL(fileURLWithPath: path).lastPathComponent
-            fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
+            fileNameLabel.lineBreakMode = NSLineBreakMode(rawValue: 4)!
             isPressed = false
         }
     }
@@ -173,7 +173,7 @@ class DragAndDropView: NSView {
             dropOrSelectLabel.isHidden = true
             fileNameLabel.isHidden = false
             fileNameLabel.stringValue = URL(fileURLWithPath: filePath[0]).lastPathComponent
-            fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
+            fileNameLabel.lineBreakMode = NSLineBreakMode(rawValue: 4)!
             setImagePreview(at: filePath[0])
             setLayer()
             return
@@ -181,13 +181,13 @@ class DragAndDropView: NSView {
         addReportLabel.isHidden = true
         fileNameLabel.isHidden = false
         fileNameLabel.stringValue = URL(fileURLWithPath: filePath[0]).lastPathComponent
-        fileNameLabel.lineBreakMode = NSParagraphStyle.LineBreakMode(rawValue: 4)!
+        fileNameLabel.lineBreakMode = NSLineBreakMode(rawValue: 4)!
         setImagePreview(at: filePath[0])
         setLayer()
     }
     
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let pasteboard = sender.draggingPasteboard().propertyList(forType: NSPasteboard.PasteboardType(rawValue: "NSFilenamesPboardType")) as? NSArray?,
+        guard let pasteboard = sender.draggingPasteboard.propertyList(forType: NSPasteboard.PasteboardType(rawValue: "NSFilenamesPboardType")) as? NSArray?,
             let paths = pasteboard else { return  false }
         filePath = paths as? [String]
         let urls = (filePath ?? []) .map { URL(fileURLWithPath: $0) }
@@ -199,7 +199,7 @@ class DragAndDropView: NSView {
 private extension DragAndDropView {
     // review: rename
     func checkExtension(_ sender: NSDraggingInfo) -> Bool {
-        guard let pasteboard = sender.draggingPasteboard().propertyList(forType: NSPasteboard.PasteboardType(rawValue: "NSFilenamesPboardType")) as? NSArray,
+        guard let pasteboard = sender.draggingPasteboard.propertyList(forType: NSPasteboard.PasteboardType(rawValue: "NSFilenamesPboardType")) as? NSArray,
             let path = pasteboard[0] as? String
             else { return false }
         

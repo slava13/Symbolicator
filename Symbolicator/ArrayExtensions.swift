@@ -10,7 +10,7 @@ import Foundation
 
 public extension Array {
     
-    public var isNotEmpty: Bool {
+    var isNotEmpty: Bool {
         return !isEmpty
     }
 }
