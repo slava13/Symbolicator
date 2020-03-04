@@ -33,7 +33,7 @@ class ViewController: NSViewController {
     @IBOutlet weak var dropReport: DragAndDropView! {
         didSet {
             dropReport.dialogTitle = ""
-            dropReport.expectedExtensions = ["txt", "crash"]
+            dropReport.expectedExtensions = ["txt", "crash", "ips" ]
         }
     }
     
@@ -51,7 +51,8 @@ class ViewController: NSViewController {
     private lazy var tasks: [Symbolicator] = {
         return [
             Symbolicator(pathExtension: "txt", processor: Sample()),
-            Symbolicator(pathExtension: "crash", processor: CrashSymbolicate())
+            Symbolicator(pathExtension: "crash", processor: CrashSymbolicate()),
+            Symbolicator(pathExtension: "ips", processor: CrashSymbolicate())
         ]
     }()
     

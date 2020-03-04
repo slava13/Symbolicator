@@ -70,12 +70,19 @@ class CrashSymbolicate: Processor {
                 
                 //needed to get load address and addresses values for App itself (not only frameworks)
                 let valuesAddressesForApp = self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID).filter { !$0.isEmpty }
-                if valuesAddressesForApp.isNotEmpty {
+                if valuesAddressesForApp.isNotEmpty && reportUrl.pathExtension == "crash" {
                     addressesAndValues.append((framework: appName,
-                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID, processName: nil),
                                                valuesAddresses: self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID)))
                     addressesAndValues.append((framework: bundleID,
-                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID),
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: bundleID, processName: nil),
+                                               valuesAddresses: self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID)))
+                } else if valuesAddressesForApp.isNotEmpty && reportUrl.pathExtension == "ips" {
+                    addressesAndValues.append((framework: appName,
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: nil, processName: appName),
+                                               valuesAddresses: self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID)))
+                    addressesAndValues.append((framework: bundleID,
+                                               loadedAddress: self.findLoaddedAddressForApp(for: file, bundleID: nil, processName: appName),
                                                valuesAddresses: self.findAddressesValuesForApp(for: file, frameworkName: appName, bundleID: bundleID)))
                 }
                 
@@ -232,20 +239,8 @@ class CrashSymbolicate: Processor {
         return String(pureLoaddedAdress.suffix(11))
     }
     
-    private func findLoaddedAddressForApp(for file: [String], bundleID: String) -> String {
-        var pureLoaddedAdress = ""
-        for line in file {
-            let lookForLoad = line.range(of: "[+]\(bundleID) ", options:.regularExpression)
-            if lookForLoad != nil {
-                let nsString = line as NSString
-                let regex = try! NSRegularExpression(pattern: "0x1.*", options: [])
-                let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
-                let value = lookRegex.map { nsString.substring(with: $0.range)}
-                let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
-                pureLoaddedAdress.append(noParent.replacingOccurrences(of: "\"", with: ""))
-            }
-        }
-        return pureLoaddedAdress
+    private func findLoaddedAddressForApp(for file: [String], bundleID: String?, processName: String?) -> String {
+        return getLoadedAddress(bundleID: bundleID, in: file, processName: processName)
     }
     
     private func findAddressesValues(for file: [String], frameworkName: String) -> [String] {
@@ -310,5 +305,32 @@ class CrashSymbolicate: Processor {
         let pathToWriteCrash = dir.appendingPathComponent(fileToSave)
         try fulltext.write(toFile: pathToWriteCrash, atomically: false, encoding: String.Encoding.utf8)
         return pathToWriteCrash
+    }
+}
+
+private extension CrashSymbolicate {
+    
+    func getLoadedAddress(bundleID: String?, in file: [String], processName: String?) -> String {
+        var pureLoaddedAdress = ""
+        var regex = ""
+        for line in file {
+            if bundleID != nil {
+                guard let bundleID = bundleID else { abort() }
+                regex = "[+]\(String(describing: bundleID)) "
+            } else if processName != nil {
+                guard let processName = processName else { abort() }
+                regex = "\(String(describing: processName)) arm64"
+            }
+            let lookForLoad = line.range(of: regex, options:.regularExpression)
+            if lookForLoad != nil {
+                let nsString = line as NSString
+                let regex = try! NSRegularExpression(pattern: "0x1.*", options: [])
+                let lookRegex = regex.matches(in: line, options: [], range: NSMakeRange(0, nsString.length))
+                let value = lookRegex.map { nsString.substring(with: $0.range)}
+                let noParent = String(describing: value).replacingOccurrences(of: "[\\[\\]^]", with: "", options: .regularExpression).prefix(12)
+                pureLoaddedAdress.append(noParent.replacingOccurrences(of: "\"", with: ""))
+            }
+        }
+        return pureLoaddedAdress
     }
 }
