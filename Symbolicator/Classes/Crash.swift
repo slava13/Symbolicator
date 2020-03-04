@@ -5,7 +5,6 @@
 //  Created by Yaroslav Kopylov on 2/27/18.
 //  Copyright © 2018 com.macpawlabs.symbolicator All rights reserved.
 //
-
 import Foundation
 import Cocoa
 
